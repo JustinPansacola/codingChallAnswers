@@ -1,11 +1,11 @@
 """Combined ASGI app: three independent MCP servers, one per stage, each
 mounted at the exact path the grader calls.
 
-    POST /mcp         -> stage1 MCP server, tools: get_name, calculate,
-                          classify_shape, shape_total
-    POST /2/evaluate  -> stage2 MCP server, tool "evaluate"
-    POST /3/evaluate  -> stage3 MCP server, tool "evaluate"
-    GET  /health       -> plain liveness check, no MCP/heavy imports involved
+    POST /1/evaluate/mcp  -> stage1 MCP server, tools: get_name, calculate,
+                             classify_shape, shape_total
+    POST /2/evaluate/mcp  -> stage2 MCP server, tools: next_hop, retrieve_passages
+    POST /3/evaluate/mcp  -> stage3 MCP server, tool "evaluate"
+    GET  /health           -> plain liveness check, no MCP/heavy imports involved
 
 Each stage keeps its own FastMCP instance (see server/stages/*.py) so a
 future heavy import in one stage's evaluate() never touches the others.
@@ -22,9 +22,9 @@ from starlette.routing import Route
 from server.stages import stage1, stage2, stage3
 
 STAGES = {
-    "/mcp": stage1.mcp,
-    "/2/evaluate": stage2.mcp,
-    "/3/evaluate": stage3.mcp,
+    "/1/evaluate/mcp": stage1.mcp,
+    "/2/evaluate/mcp": stage2.mcp,
+    "/3/evaluate/mcp": stage3.mcp,
 }
 
 # Force each FastMCP instance to lazily create its session manager now, at

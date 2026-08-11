@@ -3,3 +3,5 @@ starlette
 uvicorn
 pillow
 numpy
+httpx
+tiktoken

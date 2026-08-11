@@ -3,18 +3,29 @@
 Three independent MCP servers, one per grading stage, served from a single
 process on a single port:
 
-| Path            | Stage | Tools       |
-|-----------------|-------|-------------|
-| `POST /mcp`        | 1  | `get_name`, `calculate`, `classify_shape`, `shape_total` |
-| `POST /2/evaluate` | 2  | `evaluate` |
-| `POST /3/evaluate` | 3  | `evaluate` |
-| `GET  /health`     | -  | plain liveness check |
+| Path                    | Stage | Tools       |
+|-------------------------|-------|-------------|
+| `POST /1/evaluate/mcp`  | 1  | `get_name`, `calculate`, `classify_shape`, `shape_total` |
+| `POST /2/evaluate/mcp`  | 2  | `next_hop`, `retrieve_passages` |
+| `POST /3/evaluate/mcp`  | 3  | `evaluate` |
+| `GET  /health`          | -  | plain liveness check |
 
-Stage 1 is implemented in `server/stages/stage1.py`. Stages 2 and 3 are still
-stubs in `server/stages/stage{2,3}.py`, replacing the `evaluate()` stub as
-that work starts. They're kept as separate FastMCP instances/modules so a
-heavy import added to one stage (e.g. an ML library for stage 2) never gets
-paid for by the other stages.
+Registered `teamUrl` per stage is `https://<host>/1/evaluate`,
+`https://<host>/2/evaluate`, etc. - the grader appends `/mcp` itself.
+
+Stage 1 and 2 are implemented in `server/stages/stage{1,2}.py`. Stage 3 is
+still a stub in `server/stages/stage3.py`, replacing the `evaluate()` stub
+when that work starts. They're kept as separate FastMCP instances/modules
+so a heavy import added to one stage never gets paid for by the others.
+
+Stage 2 bundles a small (39MB) pre-trained GloVe word-vector table at
+`server/stages/data/glove50_trimmed.npz`, used to blend TF-IDF with
+word-embedding cosine similarity for revision-passage retrieval. Plain
+TF-IDF alone was tested against the real study material and badly fails
+questions with no literal keyword overlap with the source text (e.g. a
+question about a "sensor grid" being "brought back into alignment" when
+the source text says an "array" was "recalibrated") - see
+`server/stages/stage2.py`'s module docstring.
 
 ## Run locally
 
