@@ -21,6 +21,7 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from server.showdown import routes as showdown
 from server.stages import stage1, stage2, stage3
 
 STAGES = {
@@ -68,6 +69,13 @@ routes = [
 ]
 routes.append(Route("/health", endpoint=health))
 routes.append(Route("/event", endpoint=event, methods=["POST"]))
+
+# SHOWDOWN is a separate challenge sharing this deployment. Its endpoints are
+# mounted both at the root and under /showdown, so either base URL can be
+# registered with the coordinator without a redeploy.
+for prefix in ("", "/showdown"):
+    routes.append(Route(f"{prefix}/move", endpoint=showdown.move, methods=["POST", "OPTIONS"]))
+routes.append(Route("/showdown/health", endpoint=showdown.health))
 
 app = Starlette(lifespan=lifespan, routes=routes)
 
