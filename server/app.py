@@ -1,10 +1,11 @@
 """Combined ASGI app: three independent MCP servers, one per stage, each
 mounted at the exact path the grader calls.
 
-    POST /1/evaluate/mcp  -> stage1 MCP server, tools: get_name, calculate,
-                             classify_shape, shape_total
-    POST /2/evaluate/mcp  -> stage2 MCP server, tools: next_hop, retrieve_passages
-    POST /3/evaluate/mcp  -> stage3 MCP server, tool "evaluate"
+    POST /1/evaluate/mcp  -> stage1 MCP server, tools: get_name, do_arithmetic,
+                             resolve_whole_expr, classify_shape_from_base64,
+                             shape_total
+    POST /2/evaluate/mcp  -> stage2 MCP server, tools: go, recall
+    POST /3/evaluate/mcp  -> stage3 MCP server, tool: find_earliest_free_window
     GET  /health           -> plain liveness check, no MCP/heavy imports involved
 
 Each stage keeps its own FastMCP instance (see server/stages/*.py) so a

@@ -7,7 +7,7 @@ process on a single port:
 |-------------------------|-------|-------------|
 | `POST /1/evaluate/mcp`  | 1  | `get_name`, `do_arithmetic`, `resolve_whole_expr`, `classify_shape_from_base64`, `shape_total` |
 | `POST /2/evaluate/mcp`  | 2  | `go`, `recall` |
-| `POST /3/evaluate/mcp`  | 3  | `evaluate` |
+| `POST /3/evaluate/mcp`  | 3  | `find_earliest_free_window` |
 | `GET  /health`          | -  | plain liveness check |
 | `POST /event`           | -  | grader telemetry sink, logged to stdout |
 
@@ -24,10 +24,21 @@ permanently void the question.
 Registered `teamUrl` per stage is `https://<host>/1/evaluate`,
 `https://<host>/2/evaluate`, etc. - the grader appends `/mcp` itself.
 
-Stage 1 and 2 are implemented in `server/stages/stage{1,2}.py`. Stage 3 is
-still a stub in `server/stages/stage3.py`, replacing the `evaluate()` stub
-when that work starts. They're kept as separate FastMCP instances/modules
-so a heavy import added to one stage never gets paid for by the others.
+Each stage is implemented in `server/stages/stage{1,2,3}.py`, kept as
+separate FastMCP instances/modules so a heavy import added to one stage
+never gets paid for by the others.
+
+Stage 3 is one decisive tool rather than a set of data-fetching ones: it
+reads the inbox and each person's calendar itself and returns the single
+correct window, so the grader's agent does no arithmetic. That is
+deliberate - the two ways to lose the stage are both arithmetic. Declined
+invitations are not commitments (four of the ten daily invitations are
+`DECLINED`), and obstacles end at untidy times like `14:45` while meetings
+may only start on the hour or half hour, so the next candidate is `15:00`
+and never `14:30`. Snapping every candidate onto a 30-minute grid makes
+that fall out rather than being a rule someone has to remember. The inbox
+is ~14KB, far over the 1,500-token response ceiling, and is never returned
+to the agent; the computed window is 66 tokens.
 
 Stage 2 bundles a small (39MB) pre-trained GloVe word-vector table at
 `server/stages/data/glove50_trimmed.npz`, used to blend TF-IDF with
