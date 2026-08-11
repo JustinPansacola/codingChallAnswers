@@ -5,7 +5,7 @@ process on a single port:
 
 | Path            | Stage | Tools       |
 |-----------------|-------|-------------|
-| `POST /mcp`        | 1  | `get_name`, `calculate`, `classify_shape`, `shape_total` |
+| `POST /1/evaluate` | 1  | `get_name`, `calculate`, `classify_shape`, `shape_total` |
 | `POST /2/evaluate` | 2  | `evaluate` |
 | `POST /3/evaluate` | 3  | `evaluate` |
 | `GET  /health`     | -  | plain liveness check |

@@ -139,7 +139,18 @@ def _classify_shape(image_base64: str) -> str:
     if not mask.any():
         raise ValueError("no shape detected in image")
 
-    ys, xs = np.nonzero(mask)
+    # Only boundary pixels can be convex-hull vertices, and there are far
+    # fewer of them than the filled area - computing the hull over every
+    # foreground pixel scales with area and gets too slow on large images
+    # (multi-second for a filled 2000x2000 shape), while boundary-only
+    # scales with perimeter and stays fast.
+    up = np.roll(mask, 1, axis=0)
+    down = np.roll(mask, -1, axis=0)
+    left = np.roll(mask, 1, axis=1)
+    right = np.roll(mask, -1, axis=1)
+    boundary = mask & (~up | ~down | ~left | ~right)
+
+    ys, xs = np.nonzero(boundary)
     hull = _convex_hull(list(zip(xs.tolist(), ys.tolist())))
     if len(hull) < 3:
         raise ValueError("shape outline is degenerate")

@@ -1,7 +1,7 @@
 """Combined ASGI app: three independent MCP servers, one per stage, each
 mounted at the exact path the grader calls.
 
-    POST /mcp         -> stage1 MCP server, tools: get_name, calculate,
+    POST /1/evaluate  -> stage1 MCP server, tools: get_name, calculate,
                           classify_shape, shape_total
     POST /2/evaluate  -> stage2 MCP server, tool "evaluate"
     POST /3/evaluate  -> stage3 MCP server, tool "evaluate"
@@ -22,7 +22,7 @@ from starlette.routing import Route
 from server.stages import stage1, stage2, stage3
 
 STAGES = {
-    "/mcp": stage1.mcp,
+    "/1/evaluate": stage1.mcp,
     "/2/evaluate": stage2.mcp,
     "/3/evaluate": stage3.mcp,
 }
