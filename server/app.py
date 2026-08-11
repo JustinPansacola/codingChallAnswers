@@ -22,9 +22,9 @@ from starlette.routing import Route
 from server.stages import stage1, stage2, stage3
 
 STAGES = {
-    "/1/evaluate": stage1.mcp,
-    "/2/evaluate": stage2.mcp,
-    "/3/evaluate": stage3.mcp,
+    "/1/evaluate/mcp": stage1.mcp,
+    "/2/evaluate/mcp": stage2.mcp,
+    "/3/evaluate/mcp": stage3.mcp,
 }
 
 # Force each FastMCP instance to lazily create its session manager now, at
