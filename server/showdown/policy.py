@@ -29,23 +29,23 @@ from server.showdown import equity as eq
 # Equity needed to put chips in voluntarily. Post-reveal thresholds sit
 # higher because there is no longer a community number to come that could
 # rescue a bad number.
-VALUE_BET_PRE = 0.56
-VALUE_BET_POST = 0.58
-VALUE_RAISE_PRE = 0.66
-VALUE_RAISE_POST = 0.68
+VALUE_BET_PRE = 0.720
+VALUE_BET_POST = 0.727
+VALUE_RAISE_PRE = 0.880
+VALUE_RAISE_POST = 0.673
 
 # Cushion over raw pot odds before calling, to cover the chips a worse hand
 # will lose on later streets. Acting last is worth roughly this much back.
-CALL_MARGIN = 0.02
-POSITION_CREDIT = 0.03
+CALL_MARGIN = 0.051
+POSITION_CREDIT = 0.049
 
 # Bet sizes as a fraction of the pot.
-BLUFF_SIZE = 0.5
-BLUFF_RAISE_SIZE = 0.75
-VALUE_SIZE = 0.65
-PAIR_SIZE_VS_STATION = 1.4
-PAIR_SIZE_VS_NORMAL = 0.95
-PAIR_SIZE_VS_FOLDER = 0.65
+BLUFF_SIZE = 0.480
+BLUFF_RAISE_SIZE = 0.997
+VALUE_SIZE = 0.540
+PAIR_SIZE_VS_STATION = 1.870
+PAIR_SIZE_VS_NORMAL = 0.754
+PAIR_SIZE_VS_FOLDER = 0.915
 
 # A bluff risks some chips to win the pot, so it breaks even exactly when
 # they fold risk / (risk + pot) of the time. That is only the immediate
@@ -53,17 +53,17 @@ PAIR_SIZE_VS_FOLDER = 0.65
 # call, which is where a naive bluffing bot bleeds out. Three guards cover
 # the gap: a fat cushion over breakeven, a floor on the equity we bluff with
 # so a called bluff still wins sometimes, and giving up once called.
-BLUFF_EDGE = 0.12
-BLUFF_FREQUENCY = 0.6
-BLUFF_MIN_EQUITY = 0.30
+BLUFF_EDGE = 0.200
+BLUFF_FREQUENCY = 0.959
+BLUFF_MIN_EQUITY = 0.494
 
 # Fraction of the stack we began the hand with that we will voluntarily
 # commit across the whole hand without a pair. Counted per hand, not per
 # action: three raises each capped at a third of the stack is not a third of
 # the stack. A pair cannot lose and is exempt.
-RISK_CAP = 0.35
+RISK_CAP = 0.525
 # Equity that justifies calling past the cap anyway.
-CAP_OVERRIDE_EQUITY = 0.75
+CAP_OVERRIDE_EQUITY = 0.668
 
 # Short-stacked play: below this many chips the cap stops meaning anything
 # and marginal spots just bleed us out.
@@ -71,10 +71,18 @@ SHORT_STACK = 20
 
 # The scoreboard only steers the last quarter of the match. Earlier than
 # that, folding to protect a lead simply donates it back through the blinds.
-ENDGAME_HANDS = 25
-PROTECT_DELTA = 20
-TARGET_DELTA = 10
-DESPERATE_HANDS = 5
+# Expressed as fractions because a phase-2 leg is 40 hands, not 100.
+ENDGAME_FRACTION = 0.25
+DESPERATE_FRACTION = 0.05
+
+# What counts as clearing. Phase 1 needs +10 over one 100-hand match; a
+# phase-2 leg needs +40, or +60 on the toughest, over 40 hands.
+TARGET_DELTA_SINGLE = 10
+TARGET_DELTA_LEG = 40
+# Only protect a lead once it is clear of the *hardest* threshold we might be
+# facing - we are never told which leg is the +60 one, so treating +40 as
+# done would leave that leg's points on the table.
+PROTECT_MARGIN = 20
 
 
 @dataclass(frozen=True)
@@ -95,6 +103,7 @@ DESPERATE = Mode("desperate", -0.12, 2.0, 0.9)
 class Situation:
     number: int
     community: int | None
+    rule: str
     pot: int
     to_call: int
     stack: int
@@ -109,10 +118,34 @@ class Situation:
     hands_left: int
     chip_delta: int
     stack_at_hand_start: int
+    target_delta: int
+    total_hands: int
 
     @property
-    def has_pair(self) -> bool:
-        return self.community is not None and self.number == self.community
+    def locked(self) -> bool:
+        """This holding cannot lose - it wins or ties against everything.
+
+        A pair under `standard`, the lowest non-pair under `low_ball`, a 7
+        under `wild_seven`. Chips in with it are free, so it is exempt from
+        the exposure cap.
+        """
+        return eq.is_locked(self.number, self.community, self.rule)
+
+    @property
+    def holds_pair(self) -> bool:
+        return eq.holds_pair(self.number, self.community, self.rule)
+
+    @property
+    def bounty(self) -> int:
+        """Chips the house pays for winning a showdown holding a pair.
+
+        Only under `pair_bounty`, and only at showdown - a hand won by a fold
+        pays nothing, so this raises the value of *calling*, never of betting
+        big enough to make them fold.
+        """
+        if self.rule == eq.PAIR_BOUNTY and self.holds_pair:
+            return eq.PAIR_BOUNTY_CHIPS
+        return 0
 
     @property
     def current_bet(self) -> int:

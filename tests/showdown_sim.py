@@ -117,6 +117,14 @@ class Table:
         self._settle()
         self.history.append(self.log)
 
+        # Chips are conserved: nothing is created or destroyed by betting,
+        # folding, splitting, or returning an uncalled bet.
+        if sum(self.stacks) != 2 * STARTING_STACK:
+            raise IllegalAction(
+                f"hand {hand_number} leaked chips: stacks {self.stacks} "
+                f"sum to {sum(self.stacks)}, expected {2 * STARTING_STACK}"
+            )
+
     # --- betting -----------------------------------------------------------
 
     def _commit(self, seat: int, amount: int) -> None:
@@ -155,19 +163,28 @@ class Table:
 
             opponent = 1 - seat
             to_call = min(current_bet - self.bet_this_round[seat], self.stacks[seat])
-            can_escalate = self.stacks[seat] > to_call and not self.all_in[opponent]
-
-            if to_call <= 0:
-                legal = ["check"] + (["bet"] if can_escalate else [])
-                min_raise_to = min(max(BIG_BLIND, 1), self.bet_this_round[seat] + self.stacks[seat])
-            else:
-                legal = ["fold", "call"] + (["raise"] if can_escalate else [])
-                min_raise_to = current_bet + last_raise_size
             max_raise_to = self.bet_this_round[seat] + self.stacks[seat]
+            # Escalating has to actually raise the bet. Requiring the ceiling
+            # to clear the current bet is what guarantees that - without it,
+            # the big blind facing to_call == 0 can "bet" to the blind it
+            # already posted and the round never ends.
+            can_escalate = max_raise_to > current_bet and not self.all_in[opponent]
+
+            # "bet" only opens; once anything is in, escalating is a "raise" -
+            # which includes the big blind's option, where to_call is 0 but the
+            # blind is already a live bet.
+            verb = "bet" if current_bet == 0 else "raise"
+            if to_call <= 0:
+                legal = ["check"] + ([verb] if can_escalate else [])
+            else:
+                legal = ["fold", "call"] + ([verb] if can_escalate else [])
+
             if not can_escalate:
                 min_raise_to = max_raise_to = None
             else:
-                min_raise_to = min(min_raise_to, max_raise_to)
+                floor = BIG_BLIND if current_bet == 0 else current_bet + last_raise_size
+                # Short of a full minimum raise, all-in is still legal.
+                min_raise_to = min(floor, max_raise_to)
 
             reply = self.bots[seat](
                 self._request(seat, to_call, legal, min_raise_to, max_raise_to)
