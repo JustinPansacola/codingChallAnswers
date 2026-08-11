@@ -5,10 +5,16 @@ process on a single port:
 
 | Path                    | Stage | Tools       |
 |-------------------------|-------|-------------|
-| `POST /1/evaluate/mcp`  | 1  | `get_name`, `calculate`, `classify_shape`, `shape_total` |
+| `POST /1/evaluate/mcp`  | 1  | `get_name`, `do_arithmetic`, `resolve_whole_expr`, `classify_shape_from_base64`, `shape_total` |
 | `POST /2/evaluate/mcp`  | 2  | `next_hop`, `retrieve_passages` |
 | `POST /3/evaluate/mcp`  | 3  | `evaluate` |
 | `GET  /health`          | -  | plain liveness check |
+| `POST /event`           | -  | grader telemetry sink, logged to stdout |
+
+Stage 1's tool names and signatures come from the stage cheat sheet, served
+at `/1/cheat-sheet` (markdown at `/docs/stage-1-cheat-sheet.md`) on the
+grader host - it is the authoritative contract and is not linked from the
+public brief.
 
 Registered `teamUrl` per stage is `https://<host>/1/evaluate`,
 `https://<host>/2/evaluate`, etc. - the grader appends `/mcp` itself.

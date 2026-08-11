@@ -37,6 +37,13 @@ _UNARYOPS = {
     ast.USub: operator.neg,
 }
 
+_BINARY_OPERATORS = {
+    "+": operator.add,
+    "-": operator.sub,
+    "*": operator.mul,
+    "/": operator.truediv,
+}
+
 
 def _eval_node(node: ast.AST) -> float:
     if isinstance(node, ast.Expression):
@@ -121,21 +128,51 @@ def _rdp(points: list, epsilon: float) -> list:
     return [start, end]
 
 
-def _classify_shape(image_base64: str) -> str:
-    from PIL import Image
+def _shape_mask(img):
+    """Boolean mask of the shape's pixels.
+
+    The graded images are RGBA (PNG colour type 6). Going straight to "L"
+    throws the alpha channel away, so a dark shape on a transparent
+    background collapses to black-on-black and disappears entirely - hence
+    the alpha channel is consulted first whenever it actually carries
+    transparency.
+    """
     import numpy as np
 
-    image_bytes = _decode_image_bytes(image_base64)
-    img = Image.open(io.BytesIO(image_bytes)).convert("L")
-    arr = np.asarray(img, dtype=np.float64)
+    if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+        alpha = np.asarray(img.convert("RGBA").getchannel("A"), dtype=np.float64)
+        # Only trust alpha when it genuinely distinguishes regions; a fully
+        # opaque RGBA image says nothing about where the shape is.
+        if alpha.min() < 250:
+            mask = alpha > 128
+            if mask.any() and not mask.all():
+                return mask
 
-    h, w = arr.shape
-    background = float(np.median([arr[0, 0], arr[0, w - 1], arr[h - 1, 0], arr[h - 1, w - 1]]))
+    arr = np.asarray(img.convert("L"), dtype=np.float64)
+    # Median over the whole border, not just the four corners: a shape that
+    # covers one corner would otherwise poison the background estimate.
+    border = np.concatenate([arr[0, :], arr[-1, :], arr[:, 0], arr[:, -1]])
+    background = float(np.median(border))
 
     diff = np.abs(arr - background)
     threshold = max(20.0, float(diff.max()) * 0.25) if diff.max() > 0 else 20.0
     mask = diff > threshold
 
+    # If "foreground" swallowed nearly the whole frame, the background
+    # estimate was wrong (shape dominates the border) - take the complement.
+    if mask.mean() > 0.9:
+        mask = ~mask
+    return mask
+
+
+def _classify_shape(image_base64: str) -> str:
+    from PIL import Image
+    import numpy as np
+
+    image_bytes = _decode_image_bytes(image_base64)
+    img = Image.open(io.BytesIO(image_bytes))
+
+    mask = _shape_mask(img)
     if not mask.any():
         raise ValueError("no shape detected in image")
 
@@ -144,11 +181,14 @@ def _classify_shape(image_base64: str) -> str:
     # foreground pixel scales with area and gets too slow on large images
     # (multi-second for a filled 2000x2000 shape), while boundary-only
     # scales with perimeter and stays fast.
-    up = np.roll(mask, 1, axis=0)
-    down = np.roll(mask, -1, axis=0)
-    left = np.roll(mask, 1, axis=1)
-    right = np.roll(mask, -1, axis=1)
-    boundary = mask & (~up | ~down | ~left | ~right)
+    # Pad rather than roll: np.roll wraps, so a shape running to the image
+    # edge would see itself as its own neighbour and lose that boundary.
+    padded = np.pad(mask, 1, constant_values=False)
+    up = padded[:-2, 1:-1]
+    down = padded[2:, 1:-1]
+    left = padded[1:-1, :-2]
+    right = padded[1:-1, 2:]
+    boundary = mask & ~(up & down & left & right)
 
     ys, xs = np.nonzero(boundary)
     hull = _convex_hull(list(zip(xs.tolist(), ys.tolist())))
@@ -190,26 +230,43 @@ def get_name() -> str:
 
 
 @mcp.tool()
-def calculate(expression: str) -> float:
-    """Evaluate a basic arithmetic expression and return the numeric result.
+def do_arithmetic(a: float, b: float, operator: str) -> float:
+    """Perform one basic arithmetic operation on two numbers.
 
-    Supports +, -, *, /, unary minus, and parentheses, with standard
-    operator precedence (multiplication/division before addition/
-    subtraction) - so "2 + 3 * 4" correctly evaluates to 14, not 20.
+    `operator` is one of "+", "-", "*", "/". For an expression that mixes
+    operators, use `resolve_whole_expr` instead - applying this tool left
+    to right gets the precedence wrong.
     """
-    return _safe_arithmetic(expression)
+    op = operator.strip()
+    if op not in _BINARY_OPERATORS:
+        raise ValueError(f"unsupported operator {operator!r}; expected one of + - * /")
+    if op == "/" and b == 0:
+        raise ValueError("division by zero")
+    return _BINARY_OPERATORS[op](a, b)
 
 
 @mcp.tool()
-def classify_shape(image_base64: str) -> str:
-    """Classify a base64-encoded PNG image of a single 2D shape.
+def resolve_whole_expr(expr: str) -> float:
+    """Evaluate a whole arithmetic expression using standard order of
+    operations, and return the numeric result.
 
-    Returns exactly one of: "rectangle", "triangle", "circle". Any
-    four-sided figure (square, rhombus, trapezoid, ...) counts as a
-    "rectangle"; the only distinction made is four-sided vs three-sided
-    vs round.
+    Supports +, -, *, /, unary minus, and parentheses. Multiplication and
+    division bind tighter than addition and subtraction, so "2 + 3 * 4"
+    evaluates to 14, not 20.
     """
-    return _classify_shape(image_base64)
+    return _safe_arithmetic(expr)
+
+
+@mcp.tool()
+def classify_shape_from_base64(base64_image: str) -> str:
+    """Classify the geometric shape in a base64-encoded PNG image.
+
+    Returns exactly one of the lowercase words "rectangle", "triangle",
+    "circle". Any four-sided figure (square, rhombus, trapezoid, ...) is
+    reported as "rectangle"; the only distinction made is four-sided vs
+    three-sided vs round.
+    """
+    return _classify_shape(base64_image)
 
 
 @mcp.tool()

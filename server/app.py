@@ -11,6 +11,7 @@ Each stage keeps its own FastMCP instance (see server/stages/*.py) so a
 future heavy import in one stage's evaluate() never touches the others.
 """
 
+import json
 import os
 from contextlib import AsyncExitStack, asynccontextmanager
 
@@ -45,11 +46,27 @@ async def health(request):
     return JSONResponse({"ok": True})
 
 
+async def event(request):
+    """Grader telemetry sink: one POST per tool call while a run is in
+    progress, naming the problem and attempt. Purely diagnostic - it cannot
+    affect scoring, and the grader swallows any error raised here - but it
+    is the only channel that says *why* a run scored what it did, so it is
+    logged to stdout where the platform's log viewer will show it.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {"unparseable_body": True}
+    print(f"[event] {json.dumps(payload, default=str)}", flush=True)
+    return JSONResponse({"ok": True})
+
+
 routes = [
     Route(path, endpoint=StreamableHTTPASGIApp(server.session_manager), methods=["GET", "POST", "DELETE"])
     for path, server in STAGES.items()
 ]
 routes.append(Route("/health", endpoint=health))
+routes.append(Route("/event", endpoint=event, methods=["POST"]))
 
 app = Starlette(lifespan=lifespan, routes=routes)
 
